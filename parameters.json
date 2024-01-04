@@ -1,0 +1,10 @@
+{
+    "vibr_energy": {
+        "anharmonicity": "True",
+        "anh_series_terms_number": 1
+    },
+    "rot_energy": {
+        "rigid_rotator_model": "False",
+        "series_terms_number": 2
+    }
+}
