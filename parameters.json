@@ -1,4 +1,14 @@
 {
+    "energy_levels": {
+        "molecule": {
+            "translational": 1,
+            "rotational": 1,
+            "electronic": 5
+        },
+        "atom": {
+            "electronic": 20
+        }
+    },
     "vibr_energy": {
         "anharmonicity": "True",
         "anh_series_terms_number": 1
