@@ -1,13 +1,28 @@
-"""Kinetic library version 0.01"""
+"""Kinetic library version 0.02
+with the capability to calculate various thermodynamic properties for arbitrary temperature:
+
+    Statistical Sums: Total/Translational/Internal
+    Specific Energy: Total/Translational/Internal
+    Specific Heat at Constant Volume: Total/Translational/Internal
+
+The calculations for these properties take into account translational/electronic degrees of freedom for atoms and translational/electronic/vibrational/rotational degrees of freedom for molecules. In the case of molecules, 
+the rotational energy depend on the electronic and vibrational levels, 
+and the vibrational energy depend on the electronic level.
+
+
+"""
 
 import json
 from abc import abstractmethod
 import numpy as np
 
+CM_TO_M = 100
+G_TO_KG = 1000
+
 
 class Particle:
     """
-    Class for a particle
+    Class for a particle, with derived classes of Molecule and Atom
     """
 
     # Class property to store molecular information
@@ -18,28 +33,34 @@ class Particle:
     parameters = {}
 
     def __init__(self, name):
+        """
+        Particle initialization
+
+        Parameters:
+        - name (string): the name of the particle, e.g. N2, N
+        """
         self.name = name
         self.particle_data = self.particle_data[name]
-        self.mass = self.particle_data["m"] / 1000  # g -> kg
+        self.mass = self.particle_data["m"] / G_TO_KG
         self.R_specific = self.constants["k_B"] * self.constants["N_a"] / self.mass
 
-    def __repr__(self):  # repr
+    def __repr__(self):  # to print in console environment
         return self.name
 
     def _eps(self, n, i, j):
         """
         Internal energy for i-th vibrational, j-th rotational
-        and n-th electronic level
+        and n-th electronic state
         $$\varepsilon^{c}_{nij} + \varepsilon^{el,c}_{nij} + \varepsilon^{rot,c}_{nij} + \varepsilon^{vibr,c}_{nij}$$
         Parameters:
-        - n (int) electronic level
+        - n (int) electronic state
         - i (int) rotational level
-        - j (int) electronic level
+        - j (int) vibrational level
 
         Returns:
         float: internal energy
         """
-        return self._eps_el(n) + self._eps_v(i, n) + self._eps_r(i, j, n)
+        return self._eps_el(n) + self._eps_v(n, i) + self._eps_r(n, i, j)
 
     def _eps_el(self, n):
         """
@@ -48,7 +69,7 @@ class Particle:
         hc = self.constants["h"] * self.constants["c"]
         return self.particle_data["eps_el_n"][n] * hc * 100
 
-    def _eps_v(self, i, n):
+    def _eps_v(self, n, i):
         """
         Vibrational energy for i-th vibrational level
         and n-th electronic state
@@ -58,21 +79,19 @@ class Particle:
         + \omega^{c,n}_{e}y^{c,n}_{e}\Big(i+\frac{1}{2}\Big)^3\Big)$$
         """
         hc = self.constants["h"] * self.constants["c"]
-        # wy, wz?
-        #  model with I_c
+        # alt model with I_c
         eps_divbyhc = (
             self.particle_data["omega_n"][n] * (i + 0.5)
             - self.particle_data["omega_ex_n"][n] * (i + 0.5) ** 2
-            + self.particle_data["omega_ey_n"][n] * (i + 0.5) ** 2
+            + self.particle_data["omega_ey_n"][n] * (i + 0.5) ** 3
         )
-        # *100 cm -> m
-        return eps_divbyhc * hc * 100
+        return eps_divbyhc * hc * CM_TO_M
 
-    def _eps_r(self, i, j, n):
+    def _eps_r(self, n, i, j):
         """
         Rotational energy for i-th vibrational, j-th rotational levels
         and n-th electronic state
-        $$\varepsilon^{c,ni}_{j} = hc \Big(B^{c}_{ni}j(j+1)-D^{c}_{ni}j^2(j+1)^2 + ...\Big)$$
+        $$\varepsilon^{c,ni}_{j} = hc \Big(B^{c}_{ni}j(j+1)-D^{c}_{ni}j^2(j+1)^2 + \dots\Big)$$
         $$B^{c}_{ni} = B^{c}_{n,e} - \alpha^{c}_{n,e}\Big(i + \frac{1}{2}\Big)$$
         $$D^{c}_{ni} = D^{c}_{n,e} - \beta^{c}_{n,e}\Big(i + \frac{1}{2}\Big)$$
         """
@@ -80,10 +99,11 @@ class Particle:
         B_ni = self.particle_data["B_n"][n] - self.particle_data["alpha_n"][n] * (
             i + 0.5
         )
-        D_ni = self.particle_data["D_n"][n]  # - beta...
+        D_ni = self.particle_data["D_n"][n] - self.particle_data["beta_n"][n] * (
+            i + 0.5
+        )
         eps_divbyhc = B_ni * j * (j + 1) - D_ni * (j * (j + 1)) ** 2
-        # *100 cm -> m
-        return eps_divbyhc * hc * 100
+        return eps_divbyhc * hc * CM_TO_M
 
     def Z(self, T):
         """
@@ -149,9 +169,21 @@ class Particle:
 
     def c_p(self, T):
         """
-        Internal unit heat capacity at constant pressure
+        Unit heat capacity at constant pressure
         """
-        return self.R_specific + self.c_v_int(T)
+        return self.R_specific + self.c_v(T)
+
+    def c_p_tr(self, T=None):
+        """
+        Translational unit heat capacity at constant pressure
+        """
+        return (5 / 2) * self.R_specific
+
+    def c_p_int(self, T):
+        """
+        Translational unit heat capacity at constant pressure
+        """
+        return self.c_p(T) - self.c_p_tr(T)
 
     def e(self, T):
         """
@@ -196,16 +228,33 @@ class Molecule(Particle):
 
     def __init__(self, name):
         super().__init__(name)
-        self.i_max = self.parameters["energy_levels"]["molecule"]["translational"]
+        self.i_max = self.parameters["energy_levels"]["molecule"]["vibrational"]
         self.j_max = self.parameters["energy_levels"]["molecule"]["rotational"]
         self.n_max = self.parameters["energy_levels"]["molecule"]["electronic"]
 
-    def _sum_over_gnij(self, term):
+    def _sum_over_gnij(self, expr):
+        """
+        Sum an expression multiplied by g_{i,j,n}:
+        $$\sum_{nij}g^{c}_{n}g^{c}_{i}g^{c}_{j} expr(n,i,j)$$
+
+        Parameters:
+        - expr: function, depending on n,i,j
+
+        Returns:
+        (float) Computed sum
+        """
+
+        def g_i(i):  # g_{i} vibrational
+            return 1
+
+        def g_j(j):  # g_{j} rotational
+            return 2 * j + 1
+
+        def g_n(i):  # g_{n} electronic
+            return 2 * i + 1
+
         res = sum(
-            (2 * j + 1)  # g_{j} rotational
-            * 1  # g_{i} vibrational
-            * (2 * n + 1)  # g_{n} electronic
-            * term(n, i, j)
+            g_i(i + 1) * g_j(j + 1) * g_n(n + 1) * expr(n, i, j)
             for i in range(self.i_max)
             for j in range(self.j_max)
             for n in range(self.n_max)
@@ -214,7 +263,7 @@ class Molecule(Particle):
 
     def Z_int(self, T):
         """
-        Partition function for internal energy
+        The internal partition function
         $$Z_{int,c} =
         \sum_{nij}g^{c}_{n}g^{c}_{i}g^{c}_{j}\exp{\Big(-\frac{\varepsilon^{c}_{nij}}{kT})}$$
 
@@ -287,22 +336,72 @@ class Atom(Particle):
         super().__init__(name)
         self.n_max = self.parameters["energy_levels"]["atom"]["electronic"]
 
-    def _sum_over_gn(self):
-        pass
+    def _sum_over_gn(self, term):
+        """
+        Sum an expression multiplied by g_{n}:
+        $$\sum_{n}g^{c}_{n} expr(n)$$
+
+        Parameters:
+        - expr: function, depending on n
+
+        Returns:
+        (float) Computed sum
+        """
+        res = sum((2 * n + 1) * term(n) for n in range(self.n_max))  # g_{n} electronic
+        return res
 
     def e_int(self, T):
-        pass
+        """
+        Unit internal energy
+        for atom summing only over electronic states
+        $$e_{int,c} =
+        \frac{1}{m_{c}Z_{int,c}\sum_{n}g_{c,n}\varepsilon^{c}_{n}\exp{(\frac{-\varepsilon^{c}_{n}}{kT})}$$
+
+        Parameters:
+        - T: Temperature in Kelvin
+
+        Returns:
+        Unit internal energy
+        """
+        emZ = self._sum_over_gn(
+            lambda n: self._eps_el(n)
+            * np.exp(-self._eps_el(n) / (self.constants["k_B"] * T))
+        )
+        e = emZ / ((self.mass / self.constants["N_a"]) * self.Z_int(T))
+        return e
 
     def c_v_int(self, T):
-        pass
+        """
+        Internal unit heat capacity at constant volume
+        for atom summing only over electronic states
+
+         Parameters:
+        - T: Temperature in Kelvin
+
+        Returns:
+        Internal unit heat capacity at constant volume
+
+        """
+        k = self.constants["k_B"]
+        term1 = self._sum_over_gn(
+            lambda n: self._eps_el(n) ** 2
+            * np.exp(-self._eps_el(n) / (k * T))
+            / (k * T) ** 2
+        ) / self.Z_int(T)
+        term2 = self._sum_over_gn(
+            lambda n: self._eps_el(n) * np.exp(-self._eps_el(n) / (k * T)) / (k * T)
+        ) / self.Z_int(T)
+        return (
+            self.constants["k_B"]
+            / (self.mass / self.constants["N_a"])
+            * (term1 - term2**2)
+        )
 
     def Z_int(self, T):
         """
         Partition function for internal energy
         """
-        Z = sum(
-            (2 * n + 1) * np.exp(-self._eps_el(n) / (self.constants["k_B"] * T))
-            for n in range(self.n_max)
+        Z = self._sum_over_gn(
+            lambda n: np.exp(-self._eps_el(n) / (self.constants["k_B"] * T))
         )
-
         return Z

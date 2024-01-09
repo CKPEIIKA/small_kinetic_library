@@ -1,7 +1,7 @@
 {
     "energy_levels": {
         "molecule": {
-            "translational": 1,
+            "vibrational": 2,
             "rotational": 1,
             "electronic": 5
         },

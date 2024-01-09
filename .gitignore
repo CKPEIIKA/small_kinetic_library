@@ -2,3 +2,4 @@ framework.ipynb
 __pycache__/kinetic_lib.cpython-311.pyc
 tests/__pycache__/__init__.cpython-311.pyc
 tests/__pycache__/test_kinetic_lib.cpython-311-pytest-7.4.0.pyc
+.pytest_cache/
