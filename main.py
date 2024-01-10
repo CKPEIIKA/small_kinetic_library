@@ -9,7 +9,12 @@ N2 = Molecule("N2")
 N = Atom("N")
 T = T1
 
-print("Results for N2 at Temperature:", T, "K")
+
+print(
+    f"Results for N2 at Temperature: {T} K with "
+    f"{N2.n_max+1} electronic states, {N2.i_max+1} vibrational energy levels, "
+    f"and {N2.j_max+1} rotational energy levels:"
+)
 
 print("\nPartition Functions:")
 print("Z_tr:", N2.Z_tr(T))

@@ -226,11 +226,13 @@ class Molecule(Particle):
     Class for a molecule
     """
 
+    n_max = None
+    i_max = None
+    j_max = None
+
     def __init__(self, name):
         super().__init__(name)
-        self.i_max = self.parameters["energy_levels"]["molecule"]["vibrational"]
-        self.j_max = self.parameters["energy_levels"]["molecule"]["rotational"]
-        self.n_max = self.parameters["energy_levels"]["molecule"]["electronic"]
+        self._find_max_possible_nij()
 
     def _sum_over_gnij(self, expr):
         """
@@ -250,21 +252,21 @@ class Molecule(Particle):
         def g_j(j):  # g_{j} rotational
             return 2 * j + 1
 
-        def g_n(i):  # g_{n} electronic
-            return 2 * i + 1
+        def g_n(n):  # g_{n} electronic
+            return 2 * n + 1
 
         res = sum(
             g_i(i + 1) * g_j(j + 1) * g_n(n + 1) * expr(n, i, j)
+            for n in range(self.n_max)
             for i in range(self.i_max)
             for j in range(self.j_max)
-            for n in range(self.n_max)
         )
         return res
 
     def Z_int(self, T):
         """
         The internal partition function
-        $$Z_{int,c} =
+        $$Z_{int,c} = \frac{1}{\sigma}
         \sum_{nij}g^{c}_{n}g^{c}_{i}g^{c}_{j}\exp{\Big(-\frac{\varepsilon^{c}_{nij}}{kT})}$$
 
         Parameters:
@@ -273,11 +275,46 @@ class Molecule(Particle):
         Returns:
         Partition function for internal energy
         """
-        Z = self._sum_over_gnij(
-            lambda n, i, j: np.exp(-self._eps(n, i, j) / (self.constants["k_B"] * T))
-        )
+        if self.n_max is None or self.i_max is None or self.j_max is None:
+            self._find_max_possible_nij()
+
+        def expression(n, i, j):
+            return np.exp(-self._eps(n, i, j) / (self.constants["k_B"] * T))
+
+        Z = self._sum_over_gnij(expression) / self.particle_data["sigma"]
 
         return Z
+
+    def _find_max_possible_nij(self):
+        """
+        Finding maximum possible energy state based on dissociation energy E_diss
+        """
+        n_max = 0
+        i_max = 0
+        j_max = 0
+        hc = self.constants["h"] * self.constants["c"]
+        for n in range(self.parameters["energy_levels"]["molecule"]["electronic"]):
+            E_diss = self.particle_data["E_diss"][n] * hc * CM_TO_M
+            if self._eps(n, 0, 0) >= E_diss:
+                break
+            n_max = n
+            for i in range(self.parameters["energy_levels"]["molecule"]["vibrational"]):
+                if self._eps(n, i, 0) >= E_diss or (
+                    i != 0 and self._eps_v(n, i) < self._eps_v(n, i - 1)
+                ):
+                    break
+                i_max = i
+                for j in range(
+                    self.parameters["energy_levels"]["molecule"]["rotational"]
+                ):
+                    if self._eps(n, i, j) >= E_diss or (
+                        j != 0 and self._eps_r(n, i, j) < self._eps_r(n, i, j - 1)
+                    ):
+                        break
+                j_max = j
+        self.n_max = n_max
+        self.i_max = i_max
+        self.j_max = j_max
 
     def e_int(self, T):
         """

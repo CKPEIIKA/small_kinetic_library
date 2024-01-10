@@ -1,8 +1,8 @@
 {
     "energy_levels": {
         "molecule": {
-            "vibrational": 2,
-            "rotational": 1,
+            "vibrational": 50,
+            "rotational": 50,
             "electronic": 5
         },
         "atom": {
