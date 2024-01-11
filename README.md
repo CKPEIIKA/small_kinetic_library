@@ -1,4 +1,4 @@
-# Simple thermodynamics Library
+# Simple kinetic library
 
 ## Overview
 
