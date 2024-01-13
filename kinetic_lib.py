@@ -184,11 +184,27 @@ class Particle:
         """
         return (3 / 2) * self.constants["k_B"] / self.mass
 
-    @abstractmethod
-    def c_v_int(self, T):
+    def c_v_int(self, T, p=None):
         """
-        Internal heat capacity at constant volume, defined in subclasses
+        Internal unit heat capacity at constant volume
+        $$C_{v,int} = \frac{dE_{v,int}}{dT}$$
+
+         Parameters:
+        - T: Temperature in Kelvin
+        - p: Pressure in Pascals
+
+        Returns:
+        Internal unit heat capacity at constant volume
+
         """
+        T = self._check_pressure_and_temperature(T, p)
+
+        esquared = self.e_int(T, squared=True)
+        squareofe = self.e_int(T) ** 2 * self.mass
+
+        c_v = (esquared - squareofe) / (self.constants["k_B"] * T**2)
+
+        return c_v
 
     def c_p(self, T):
         """
@@ -226,7 +242,7 @@ class Particle:
         return (3 / 2) * (self.constants["k_B"] / self.mass) * T
 
     @abstractmethod
-    def e_int(self, T):
+    def e_int(self, T, squared=False):
         """
         Internal unit energy, defined in subclasses
         """
@@ -461,28 +477,6 @@ class Molecule(Particle):
         e = emZ / (self.mass * self.Z_int(T))
         return e / sigma
 
-    def c_v_int(self, T, p=None):
-        """
-        Internal unit heat capacity at constant volume
-        $$C_{v,int} = \frac{dE_{v,int}}{dT}$$
-
-         Parameters:
-        - T: Temperature in Kelvin
-        - p: Pressure in Pascals
-
-        Returns:
-        Internal unit heat capacity at constant volume
-
-        """
-        T = self._check_pressure_and_temperature(T, p)
-
-        esquared = self.e_int(T, squared=True)
-        squareofe = self.e_int(T) ** 2 * self.mass
-
-        c_v = (esquared - squareofe) / (self.constants["k_B"] * T**2)
-
-        return c_v
-
 
 class Atom(Particle):
     """
@@ -507,11 +501,16 @@ class Atom(Particle):
         (float) Computed sum
         """
         res = sum(
-            (2 * n + 1) * term(n) for n in self._allowed_levels
+            (2 * n + 1) * term(n) for n in range(len(self._allowed_levels))
         )  # g_{n} electronic
         return res
 
-    def e_int(self, T):
+    def e_int(
+        self,
+        T,
+        p=None,
+        squared=False,
+    ):
         """
         Unit internal energy
         for atom summing only over electronic states
@@ -520,43 +519,36 @@ class Atom(Particle):
 
         Parameters:
         - T: Temperature in Kelvin
+        - p: Pressure in Pascal
+        - squared: Whether to compute \varepsilon^{c}_{nij} or (\varepsilon^{c}_{nij}) before exponent
 
         Returns:
         Unit internal energy
         """
-        emZ = self._sum_over_gn(
-            lambda n: self._eps_el(n)
-            * np.exp(-self._eps_el(n) / (self.constants["k_B"] * T))
-        )
+
+        T = self._check_pressure_and_temperature(T, p)
+
+        def summand(n):
+            if squared:
+                return self._eps_el(n) ** 2 * np.exp(
+                    -self._eps_el(n) / (self.constants["k_B"] * T)
+                )
+            return self._eps_el(n) * np.exp(
+                -self._eps_el(n) / (self.constants["k_B"] * T)
+            )
+
+        emZ = self._sum_over_gn(summand)
         e = emZ / (self.mass * self.Z_int(T))
         return e
 
-    def c_v_int(self, T):
-        """
-        Internal unit heat capacity at constant volume
-        for atom summing only over electronic states
-
-         Parameters:
-        - T: Temperature in Kelvin
-
-        Returns:
-        Internal unit heat capacity at constant volume
-
-        """
-        k = self.constants["k_B"]
-        term1 = self._sum_over_gn(
-            lambda n: self._eps_el(n) ** 2
-            * np.exp(-self._eps_el(n) / (k * T))
-            / (k * T) ** 2
-        ) / self.Z_int(T)
-        term2 = self._sum_over_gn(
-            lambda n: self._eps_el(n) * np.exp(-self._eps_el(n) / (k * T)) / (k * T)
-        ) / self.Z_int(T)
-        return self.constants["k_B"] / self.mass * (term1 - term2**2)
-
-    def Z_int(self, T):
+    def Z_int(self, T, p=None):
         """
         Partition function for internal energy
+
+        Parameters:
+        - T: Temperature in Kelvin
+        - p: Pressure in Pascal
+        T = self._check_pressure_and_temperature(T, p)
         """
         Z = self._sum_over_gn(
             lambda n: np.exp(-self._eps_el(n) / (self.constants["k_B"] * T))
