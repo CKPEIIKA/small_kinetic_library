@@ -3,7 +3,7 @@
     "g_n_tabulated": 0,
     "limit_energy_levels": {
         "molecule": {
-            "vibrational": 100,
+            "vibrational": 50,
             "rotational": 100,
             "electronic": 5
         },

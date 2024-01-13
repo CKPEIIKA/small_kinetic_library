@@ -25,12 +25,10 @@ class Particle:
     Class for a particle, with derived classes of Molecule and Atom
     """
 
-    # Class property to store molecular information
     particle_data = {}
-    # Class property to store constants
     constants = {}
-    # Class propery to store model parameters
     parameters = {}
+    _allowed_levels = []  # allowed energy levels
 
     def __init__(self, name):
         """
@@ -44,7 +42,12 @@ class Particle:
         self.particle_data = self.particle_data[name]
         self.mole_number = 1
         self.mass = self.particle_data["M"] / G_TO_KG / self.constants["N_a"]
-        self.R_specific = self.constants["k_B"] * self.constants["N_a"] / self.mass
+        self.R_specific = (
+            self.constants["k_B"]
+            * self.constants["N_a"]
+            / self.particle_data["M"]
+            * G_TO_KG
+        )
 
     def __repr__(self):  # to print in console environment
         return self.name
@@ -75,17 +78,22 @@ class Particle:
 
         """
         hc = self.constants["h"] * self.constants["c"]
-        eps_el = self.particle_data["eps_el_n"][n] * hc * 100
+        eps_el = self.particle_data["eps_el_n"][n] * hc * CM_TO_M
         return eps_el
 
     def _eps_v(self, n, i):
         """
-        Vibrational energy for i-th vibrational level
-        and n-th electronic state
-        (anharmonic oscillator model)
+        Vibrational energy for i-th vibrational level and n-th electronic state
+        (only anharmonic oscillator model is available)
         $$\varepsilon^{c,n}_{i} = hc \Big(\omega^{c,n}_{e}\Big(i+\frac{1}{2}\Big)
         - \omega^{c,n}_{e}x^{c,n}_{e}\Big(i+\frac{1}{2}\Big)^2\Big)
         + \omega^{c,n}_{e}y^{c,n}_{e}\Big(i+\frac{1}{2}\Big)^3\Big)$$
+
+
+        Parameters:
+        - n: electronic level
+        - i: vibrational level
+
         """
         hc = self.constants["h"] * self.constants["c"]
         # TODO: alt model with harmonic osc and I_c
@@ -104,6 +112,11 @@ class Particle:
         $$\varepsilon^{c,ni}_{j} = hc \Big(B^{c}_{ni}j(j+1)-D^{c}_{ni}j^2(j+1)^2 + \dots\Big)$$
         $$B^{c}_{ni} = B^{c}_{n,e} - \alpha^{c}_{n,e}\Big(i + \frac{1}{2}\Big)$$
         $$D^{c}_{ni} = D^{c}_{n,e} - \beta^{c}_{n,e}\Big(i + \frac{1}{2}\Big)$$
+
+        Parameters:
+        - n: electronic level
+        - i: vibrational level
+        - j: rotational level
         """
         # TODO: parameters for rigid rotator
         hc = self.constants["h"] * self.constants["c"]
@@ -248,7 +261,7 @@ class Particle:
         """
         # Ensure pressure and the Boltzmann constant are positive
         if p <= 0:
-            raise ValueError("Pressure and Boltzmann constant must be positive.")
+            raise ValueError("Pressure must be positive")
 
         # Calculate temperature using the ideal gas law
         T = p / (self.mole_number * self.constants["k_B"])
@@ -288,19 +301,15 @@ class Molecule(Particle):
     Class for a molecule
     """
 
-    _n_max_list = []
-    _i_max_list = []
-    _j_max_list = []
-
     def __init__(self, name):
         super().__init__(name)
         self._find_max_possible_nij()
 
     def _get_allowed_levels(self, n, i=None):
         if i is None:
-            return self._j_max_list[n]
+            return self._allowed_levels[n]
         else:
-            return self._j_max_list[n][i]
+            return self._allowed_levels[n][i]
 
     def _sum_over_gnij(self, expr):
         """
@@ -328,9 +337,9 @@ class Molecule(Particle):
 
         res = sum(
             g_i(i) * g_j(j) * g_n(n) * expr(n, i, j)
-            for n in self._n_max_list
-            for i in self._i_max_list[n]
-            for j in self._j_max_list[n][i]
+            for n in range(len(self._allowed_levels))
+            for i in range(len(self._allowed_levels[n]))
+            for j in self._allowed_levels[n][i]
         )
         return res
 
@@ -386,9 +395,10 @@ class Molecule(Particle):
             j_max_list.append(j_max_list_for_n)
             i_max_list.append(i_max_list_for_n)
 
-        self._i_max_list = i_max_list
-        self._j_max_list = j_max_list
-        self._n_max_list = n_max_list
+        assert len(n_max_list) > 0, "No allowed electronic states"
+        assert len(i_max_list[0]) > 0, "No allowed vibrational levels"
+        assert len(j_max_list[0][0]) > 0, "No allowed rotational levels"
+        self._allowed_levels = j_max_list
 
     def Z_int(self, T, p=None):
         """
@@ -417,7 +427,7 @@ class Molecule(Particle):
         Z = self._sum_over_gnij(expression) / sigma
         return Z
 
-    def e_int(self, T, p=None):
+    def e_int(self, T, p=None, squared=False):
         """
         Unit internal energy
         $$e_{int,c} =
@@ -426,20 +436,30 @@ class Molecule(Particle):
         Parameters:
         - T: Temperature in Kelvin
         - p: Pressure in Pascal
+        - squared: Whether to compute \varepsilon^{c}_{nij} or (\varepsilon^{c}_{nij}) before exponent
 
         Returns:
         Unit internal energy
         """
         T = self._check_pressure_and_temperature(T, p)
 
+        if self.parameters["enable_symmetry_factor"]:
+            sigma = self.particle_data["sigma"]
+        else:
+            sigma = 1
+
         def summand(n, i, j):
+            if squared:
+                return self._eps(n, i, j) ** 2 * np.exp(
+                    -self._eps(n, i, j) / (self.constants["k_B"] * T)
+                )
             return self._eps(n, i, j) * np.exp(
                 -self._eps(n, i, j) / (self.constants["k_B"] * T)
             )
 
         emZ = self._sum_over_gnij(summand)
-        e = emZ / ((self.mass) * self.Z_int(T))
-        return e
+        e = emZ / (self.mass * self.Z_int(T))
+        return e / sigma
 
     def c_v_int(self, T, p=None):
         """
@@ -454,19 +474,14 @@ class Molecule(Particle):
         Internal unit heat capacity at constant volume
 
         """
-        k = self.constants["k_B"]
         T = self._check_pressure_and_temperature(T, p)
 
-        def summand1(n, i, j):
-            return self._eps(n, i, j) ** 2 * np.exp(-self._eps(n, i, j) / (k * T))
+        esquared = self.e_int(T, squared=True)
+        squareofe = self.e_int(T) ** 2 * self.mass
 
-        def summand2(n, i, j):
-            return self._eps(n, i, j) * np.exp(-self._eps(n, i, j) / (k * T))
+        c_v = (esquared - squareofe) / (self.constants["k_B"] * T**2)
 
-        term1 = self._sum_over_gnij(summand1) / (k * T) ** 2 / self.Z_int(T)
-        term2 = self._sum_over_gnij(summand2) / (k * T) / self.Z_int(T)
-
-        return (term1 - term2**2) * self.constants["k_B"] / (self.mass)
+        return c_v
 
 
 class Atom(Particle):
@@ -476,7 +491,9 @@ class Atom(Particle):
 
     def __init__(self, name):
         super().__init__(name)
-        self.n_max = self.parameters["limit_energy_levels"]["atom"]["electronic"]
+        self._allowed_levels = [
+            range(self.parameters["limit_energy_levels"]["atom"]["electronic"])
+        ]
 
     def _sum_over_gn(self, term):
         """
@@ -489,7 +506,9 @@ class Atom(Particle):
         Returns:
         (float) Computed sum
         """
-        res = sum((2 * n + 1) * term(n) for n in range(self.n_max))  # g_{n} electronic
+        res = sum(
+            (2 * n + 1) * term(n) for n in self._allowed_levels
+        )  # g_{n} electronic
         return res
 
     def e_int(self, T):
