@@ -1,6 +1,7 @@
+import copy
 import numpy as np
 from numpy.testing import assert_almost_equal, assert_array_almost_equal
-from kinetic_lib import Molecule, Particle
+from kinetic_lib import CM_TO_M, Molecule, Particle
 
 
 def test_tests():
@@ -103,3 +104,73 @@ def test_allowed_electronic_lvls(load_data):
 def test_allowed_vibrational_levels(load_data):
     N2 = Molecule("N2")
     assert_almost_equal(len(N2._allowed_levels[0]), 48)
+
+
+def test_harmonic_vibrational_model(load_data):
+    original_vibr = copy.deepcopy(Particle.parameters["vibr_energy"])
+    Particle.parameters["vibr_energy"]["anharmonicity"] = False
+    Particle.parameters["vibr_energy"]["anh_series_terms_number"] = 1
+
+    try:
+        N2 = Molecule("N2")
+        level = 3
+        base = level + 0.5
+        expected = (
+            N2.particle_data["omega_n"][0]
+            * base
+            * N2.constants["h"]
+            * N2.constants["c"]
+            * CM_TO_M
+        )
+        assert_almost_equal(N2._eps_v(0, level), expected)
+    finally:
+        Particle.parameters["vibr_energy"] = original_vibr
+
+
+def test_rigid_rotator_model(load_data):
+    original_rot = copy.deepcopy(Particle.parameters["rot_energy"])
+    Particle.parameters["rot_energy"]["rigid_rotator_model"] = True
+
+    try:
+        N2 = Molecule("N2")
+        j = 10
+        expected = (
+            N2.particle_data["B_n"][0]
+            * j
+            * (j + 1)
+            * N2.constants["h"]
+            * N2.constants["c"]
+            * CM_TO_M
+        )
+        assert_almost_equal(N2._eps_r(0, 0, j), expected)
+    finally:
+        Particle.parameters["rot_energy"] = original_rot
+
+
+def test_rotational_series_terms(load_data):
+    original_rot = copy.deepcopy(Particle.parameters["rot_energy"])
+
+    try:
+        N2 = Molecule("N2")
+        Particle.parameters["rot_energy"]["rigid_rotator_model"] = False
+        Particle.parameters["rot_energy"]["series_terms_number"] = 2
+        j = 8
+        with_second_term = N2._eps_r(0, 0, j)
+
+        Particle.parameters["rot_energy"]["series_terms_number"] = 1
+        without_second_term = N2._eps_r(0, 0, j)
+
+        j_term = j * (j + 1)
+        base = 0 + 0.5
+        D_ni = N2.particle_data["D_n"][0] - N2.particle_data["beta_n"][0] * base
+        expected_delta = (
+            -D_ni
+            * (j_term**2)
+            * N2.constants["h"]
+            * N2.constants["c"]
+            * CM_TO_M
+        )
+
+        assert_almost_equal(with_second_term - without_second_term, expected_delta)
+    finally:
+        Particle.parameters["rot_energy"] = original_rot

@@ -13,7 +13,7 @@
     },
     "vibr_energy": {
         "anharmonicity": "True",
-        "anh_series_terms_number": 1
+        "anh_series_terms_number": 4
     },
     "rot_energy": {
         "rigid_rotator_model": "False",
