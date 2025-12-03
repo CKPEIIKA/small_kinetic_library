@@ -1,6 +1,8 @@
 import copy
+
 import numpy as np
 from numpy.testing import assert_almost_equal, assert_array_almost_equal
+
 from kinetic_lib import CM_TO_M, Molecule, Particle
 
 
@@ -116,11 +118,7 @@ def test_harmonic_vibrational_model(load_data):
         level = 3
         base = level + 0.5
         expected = (
-            N2.particle_data["omega_n"][0]
-            * base
-            * N2.constants["h"]
-            * N2.constants["c"]
-            * CM_TO_M
+            N2.particle_data["omega_n"][0] * base * N2.constants["h"] * N2.constants["c"] * CM_TO_M
         )
         assert_almost_equal(N2._eps_v(0, level), expected)
     finally:
@@ -163,13 +161,7 @@ def test_rotational_series_terms(load_data):
         j_term = j * (j + 1)
         base = 0 + 0.5
         D_ni = N2.particle_data["D_n"][0] - N2.particle_data["beta_n"][0] * base
-        expected_delta = (
-            -D_ni
-            * (j_term**2)
-            * N2.constants["h"]
-            * N2.constants["c"]
-            * CM_TO_M
-        )
+        expected_delta = -D_ni * (j_term**2) * N2.constants["h"] * N2.constants["c"] * CM_TO_M
 
         assert_almost_equal(with_second_term - without_second_term, expected_delta)
     finally:

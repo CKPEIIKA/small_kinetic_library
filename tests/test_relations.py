@@ -38,3 +38,13 @@ def test_atom_properties(load_data):
     assert partition > 0
     assert nitrogen.e_int(temp) > 0
     assert_almost_equal(nitrogen.e(temp), nitrogen.e_tr(temp) + nitrogen.e_int(temp))
+
+
+# def test_c_p_reference(load_data):
+#    n2 = Molecule("N2")
+#    temp = 298.15
+#    ref_cp = 1038.9
+#    ref_ratio = 0.9979
+#    assert_allclose(n2.c_p(temp), ref_cp, rtol=5e-3)
+#    ratio = n2.e_int(temp) / (temp * n2.R_specific)
+#    assert_allclose(ratio, ref_ratio, atol=5e-4)

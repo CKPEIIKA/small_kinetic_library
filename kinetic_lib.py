@@ -95,8 +95,7 @@ class Particle(ABC):
         if not isinstance(value, list):
             raise TypeError(f"{self.name}.{key} must be a list of numbers, got {type(value)!r}")
         return [
-            self._ensure_number(item, f"{self.name}.{key}[{idx}]")
-            for idx, item in enumerate(value)
+            self._ensure_number(item, f"{self.name}.{key}[{idx}]") for idx, item in enumerate(value)
         ]
 
     def __init__(self, name: str) -> None:
@@ -343,14 +342,14 @@ class Particle(ABC):
         parameters_path: str = "parameters.json",
     ) -> None:
         """Loads particle data, constants and model settings from json"""
-        with open(particle_path, "r", encoding="UTF-8") as file:
+        with open(particle_path, encoding="UTF-8") as file:
             cls.particle_catalog = json.load(file)
             cls.particle_data = cls.particle_catalog
 
-        with open(constants_path, "r", encoding="UTF-8") as file:
+        with open(constants_path, encoding="UTF-8") as file:
             cls.constants = json.load(file)
 
-        with open(parameters_path, "r", encoding="UTF-8") as file:
+        with open(parameters_path, encoding="UTF-8") as file:
             cls.parameters = json.load(file)
 
     def _pressure_to_temperature(self, p: float) -> float:
@@ -436,9 +435,11 @@ class Molecule(Particle):
         def g_j(j: int) -> int:  # g_{j} rotational
             return 2 * j + 1
 
-        g_n_values = self._get_particle_series("g_n") if self._as_bool(
-            self.parameters.get("g_n_tabulated"), default=False
-        ) else None
+        g_n_values = (
+            self._get_particle_series("g_n")
+            if self._as_bool(self.parameters.get("g_n_tabulated"), default=False)
+            else None
+        )
 
         def g_n(n: int) -> float:  # g_{n} electronic
             if g_n_values is not None:

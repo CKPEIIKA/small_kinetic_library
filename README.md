@@ -16,14 +16,35 @@ The library provides functions for the following thermodynamic properties:
 
 The library is intended for educational purposes and can be used to explore thermodynamic concepts. Users can perform calculations based on temperature and particle type, file "main.py" is provided as example.
 
+### Quick start
+
+```bash
+pip install -r requirements.txt
+python main.py
+```
+
+### Programmatic usage
+
+```python
+from kinetic_lib import Molecule, Particle
+
+Particle.load_particle_data()
+nitrogen = Molecule("N2")
+temperature = 1200.0
+
+print("Partition:", nitrogen.Z(temperature))
+print("Internal energy:", nitrogen.e_int(temperature))
+print("Heat capacity:", nitrogen.c_p(temperature))
+```
+
 ## Limitations
 
 This project is a study endeavor, and as such, there may be mistakes and under-developed features. Users are encouraged to review the code critically and contribute to its improvement.
-Contributing
+
+### Contributing
 
 Feel free to contribute to the project by forking and fixing it. 
 
 ## License
 
 This project is licensed under the MIT License.
-

@@ -1,36 +1,65 @@
-"""The main module to show the example of library usage"""
+"""Command-line sample demonstrating kinetic_lib computations."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from kinetic_lib import Atom, Molecule, Particle
 
-Particle.load_particle_data()
-T1 = 298.15
-T2 = 1000
-N2 = Molecule("N2")
-T = T1
 
-print(f"Results for N2 at Temperature: {T}")
-print("\nPartition Functions:")
-print("Z_tr:", N2.Z_tr(T))
-print("Z_int:", N2.Z_int(T))  # = 5288 Capitelli at T=298.15
-print("Total Partition Function (Z):", N2.Z(T))
+@dataclass
+class ResultRow:
+    name: str
+    temperature: float
+    Z_tr: float
+    Z_int: float
+    e_total: float
+    c_p: float
 
-print("\nInternal Energy:")
-print("e_tr:", N2.e_tr(T))
-print("e_int:", N2.e_int(T))
-print("Total Internal Energy (e):", N2.e(T))
 
-print("\nHeat Capacities:")
-print("c_v_tr:", N2.c_v_tr(T))
-print("c_v_int:", N2.c_v_int(T))
-print("Total c_v:", N2.c_v(T))
+def evaluate_species(species: Iterable[str], temperature: float) -> list[ResultRow]:
+    rows: list[ResultRow] = []
+    for name in species:
+        particle = Molecule(name) if len(name) > 1 else Atom(name)
+        rows.append(
+            ResultRow(
+                name=name,
+                temperature=temperature,
+                Z_tr=particle.Z_tr(temperature),
+                Z_int=particle.Z_int(temperature),
+                e_total=particle.e(temperature),
+                c_p=particle.c_p(temperature),
+            )
+        )
+    return rows
 
-print("\nc_p_tr:", N2.c_p_tr(T))
-print("c_p_int:", N2.c_p_int(T))
-print("Total c_p:", N2.c_p(T))
-# C_p = 2911 J/mol/K  = 1038.9 J/kg/K Capitelli at T=298.15
 
-print("\nAdditional Relations:")
-print("C_p_int/R:", N2.c_p_int(T) / N2.R_specific)
-# C_p_int/R = 1.003 Capitelli at T=298.15
-print("E_int/RT:", N2.e_int(T) / (T * N2.R_specific))
-# E_int/RT = 0.9979 Capitelli at T=298.15
+def print_table(rows: list[ResultRow]) -> None:
+    header = (
+        f"{'Species':<8}{'T [K]':>10}{'Z_tr':>15}{'Z_int':>15}{'e [J/kg]':>15}{'c_p [J/kg/K]':>18}"
+    )
+    print(header)
+    print("-" * len(header))
+    for row in rows:
+        print(
+            f"{row.name:<8}{row.temperature:>10.2f}{row.Z_tr:>15.2e}{row.Z_int:>15.2e}{row.e_total:>15.2f}{row.c_p:>18.2f}"
+        )
+
+
+def main() -> None:
+    Particle.load_particle_data()
+    baseline_temp = 298.15
+    high_temp = 2000.0
+    species = ["N2"]
+
+    print("=== Baseline conditions ===")
+    table = evaluate_species(species, baseline_temp)
+    print_table(table)
+
+    print("\n=== High-temperature conditions ===")
+    print_table(evaluate_species(species, high_temp))
+
+
+if __name__ == "__main__":
+    main()
